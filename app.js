@@ -166,7 +166,7 @@ app.post('/initiate-payment', async (req, res) => {
     console.log('Using Paystack key:', process.env.PAYSTACK_SECRET_KEY ? 'Key found' : 'Key missing');
     
     // Set the correct base URL for the callback
-    const baseUrl = process.env.BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+    const baseUrl = process.env.BASE_URL;
     
     // Initialize payment with Paystack
     const response = await axios.post(
