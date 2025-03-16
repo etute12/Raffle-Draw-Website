@@ -314,7 +314,7 @@ async function sendTicketEmail(email, tickets) {
             ${ticketsHtml}
           </div>
           <p style="margin-top: 20px; margin-bottom: 10px;">Please keep these tickets safe. You'll need to reference your ticket numbers if you win.</p>
-          <p style="margin-bottom: 20px;">The raffle draw will take place between May 26th-30th 2025. Good luck!</p>
+          <p style="margin-bottom: 20px;">The raffle draw winners announcement will take place between May 26th-30th 2025. Good luck!</p>
           <p style="color: #6c757d; font-size: 12px; text-align: center; margin-top: 30px;">This is an automated email. Please do not reply.</p>
         </div>
       `
