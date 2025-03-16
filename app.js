@@ -3,6 +3,7 @@ const { MongoClient, ServerApiVersion } = require('mongodb');
 const axios = require('axios'); // Using axios instead of paystack-api for more control
 const nodemailer = require('nodemailer');
 const path = require('path');
+const crypto = require('crypto'); // Added for webhook signature verification
 require('dotenv').config();
 
 // Log environment variables for debugging
@@ -11,6 +12,7 @@ console.log('- PAYSTACK_SECRET_KEY:', process.env.PAYSTACK_SECRET_KEY ? 'Found' 
 console.log('- MONGODB_URI:', process.env.MONGODB_URI ? 'Found' : 'Missing');
 console.log('- EMAIL_USER:', process.env.EMAIL_USER ? 'Found' : 'Missing');
 console.log('- EMAIL_PASS:', process.env.EMAIL_PASS ? 'Found' : 'Missing');
+console.log('- BASE_URL:', process.env.BASE_URL ? process.env.BASE_URL : 'Missing (will use default)');
 
 const app = express();
 
@@ -123,6 +125,10 @@ async function generateUniqueTicketNumbers(count) {
 }
 
 // Routes
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.get('/index', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -148,6 +154,76 @@ app.get('/terms', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'terms.html'));
 });
 
+// NEW WEBHOOK HANDLER
+app.post('/webhook', async (req, res) => {
+  try {
+    // Verify that this is a valid Paystack webhook
+    const hash = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
+                      .update(JSON.stringify(req.body))
+                      .digest('hex');
+    
+    if (hash === req.headers['x-paystack-signature']) {
+      // Process the webhook
+      const event = req.body;
+      console.log('Received valid webhook:', event.event);
+      
+      if (event.event === 'charge.success') {
+        const data = event.data;
+        const reference = data.reference;
+        
+        // Check if this payment has already been processed
+        const existingTicket = await db.collection('tickets').findOne({ reference });
+        
+        if (!existingTicket) {
+          console.log(`Processing webhook payment with reference: ${reference}`);
+          
+          const { metadata } = data;
+          if (metadata && metadata.matricNumber && metadata.ticketCount) {
+            const { matricNumber, ticketCount } = metadata;
+            const email = data.customer.email;
+            
+            // Generate unique ticket numbers
+            console.log(`Generating ${ticketCount} verified unique tickets for ${email}`);
+            const ticketNumbers = await generateUniqueTicketNumbers(parseInt(ticketCount));
+            
+            // Prepare ticket documents for database
+            const tickets = ticketNumbers.map(ticketNumber => ({
+              matricNumber,
+              email,
+              ticketNumber,
+              purchaseDate: new Date(),
+              reference,
+              processedByWebhook: true
+            }));
+            
+            // Save to MongoDB
+            console.log('Saving tickets to database from webhook');
+            await db.collection('tickets').insertMany(tickets);
+            
+            // Send email with tickets
+            console.log('Sending email with tickets from webhook');
+            await sendTicketEmail(email, tickets);
+          } else {
+            console.log('Missing metadata in webhook payload:', data);
+          }
+        } else {
+          console.log(`Webhook: Payment with reference ${reference} already processed`);
+        }
+      }
+      
+      // Always return success to Paystack
+      return res.status(200).send('Webhook received');
+    } else {
+      console.log('Invalid webhook signature');
+      return res.status(400).send('Invalid signature');
+    }
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    // Still return 200 to prevent Paystack from retrying
+    return res.status(200).send('Webhook received with errors');
+  }
+});
+
 app.post('/initiate-payment', async (req, res) => {
   try {
     console.log('Received payment request:', req.body);
@@ -165,8 +241,9 @@ app.post('/initiate-payment', async (req, res) => {
     console.log('Payment amount:', amount);
     console.log('Using Paystack key:', process.env.PAYSTACK_SECRET_KEY ? 'Key found' : 'Key missing');
     
-    // Set the correct base URL for the callback
-    const baseUrl = process.env.BASE_URL;
+    // Set the correct base URL for callbacks with fallback
+    const baseUrl = process.env.BASE_URL || 'https://cu-raffle-draw-tci4kdznx-ronalds-projects-a253f076.vercel.app';
+    console.log('Using base URL for callbacks:', baseUrl);
     
     // Initialize payment with Paystack
     const response = await axios.post(
@@ -174,7 +251,7 @@ app.post('/initiate-payment', async (req, res) => {
       {
         email,
         amount: amount * 100, // Convert to kobo
-        callback_url: `${baseUrl}/verify-payment`,
+        callback_url: `${baseUrl}/verify-payment`, // Complete URL where user is redirected after payment
         metadata: {
           matricNumber,
           ticketCount: parseInt(ticketCount)
@@ -219,6 +296,15 @@ app.get('/verify-payment', async (req, res) => {
   
   try {
     console.log(`Verifying payment with reference: ${reference}`);
+    // Check if this payment has already been processed by the webhook
+    const existingTicket = await db.collection('tickets').findOne({ reference });
+    
+    // If already processed by webhook, just redirect to success
+    if (existingTicket) {
+      console.log(`Payment with reference ${reference} already processed by webhook`);
+      return res.redirect('/success');
+    }
+    
     // Verify payment
     const verifyResponse = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
@@ -248,7 +334,8 @@ app.get('/verify-payment', async (req, res) => {
           email,
           ticketNumber,
           purchaseDate: new Date(),
-          reference
+          reference,
+          processedByCallback: true
         }));
         
         // Save to MongoDB
