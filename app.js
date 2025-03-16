@@ -242,7 +242,7 @@ app.post('/initiate-payment', async (req, res) => {
     console.log('Using Paystack key:', process.env.PAYSTACK_SECRET_KEY ? 'Key found' : 'Key missing');
     
     // Set the correct base URL for callbacks with fallback
-    const baseUrl = process.env.BASE_URL || 'https://cu-raffle-draw-tci4kdznx-ronalds-projects-a253f076.vercel.app';
+    const baseUrl = process.env.BASE_URL || 'https://cu-raffle-draw.vercel.app';
     console.log('Using base URL for callbacks:', baseUrl);
     
     // Initialize payment with Paystack
