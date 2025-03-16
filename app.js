@@ -123,7 +123,7 @@ async function generateUniqueTicketNumbers(count) {
 }
 
 // Routes
-app.get('/', (req, res) => {
+app.get('/index', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
