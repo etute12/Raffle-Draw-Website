@@ -308,7 +308,7 @@ async function sendTicketEmail(email, tickets) {
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #007bff; text-align: center; margin-bottom: 20px;">Thank You for Your Purchase!</h1>
-          <p style="margin-bottom: 20px;">Dear Student,</p>
+          <p style="margin-bottom: 20px;">Hello,</p>
           <p style="margin-bottom: 20px;">Thank you for purchasing tickets for our raffle draw. Below are your ticket details:</p>
           <div style="display: flex; flex-wrap: wrap; justify-content: center;">
             ${ticketsHtml}
